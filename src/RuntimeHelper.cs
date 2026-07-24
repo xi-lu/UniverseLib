@@ -1,4 +1,5 @@
-﻿using System;
+﻿using HarmonyLib;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,6 +8,8 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using HarmonyLib;
+using System.Reflection;
 
 namespace UniverseLib
 {
@@ -16,6 +19,12 @@ namespace UniverseLib
     public abstract class RuntimeHelper
     {
         internal static RuntimeHelper Instance { get; private set; }
+        internal bool UseNewSceneHandle { get; private set; }
+
+        internal FieldInfo? sceneField_Handle;
+        internal MethodInfo? sceneHandleToInt;
+        internal MethodInfo? intToSceneHandle;
+        internal MethodInfo? getSceneName;
 
         internal static void Init()
         {
@@ -25,8 +34,46 @@ namespace UniverseLib
             Instance = new Runtime.Mono.MonoProvider();
 #endif
             Instance.OnInitialize();
+            Instance.Internal_SceneHandleInitialize();
         }
 
+        protected internal void Internal_SceneHandleInitialize()
+        {
+            Type? sceneType = ReflectionUtility.GetTypeByName("UnityEngine.SceneManagement.Scene");
+            if (sceneType == null)
+            {
+                throw new Exception("This version of Unity does not ship with the 'Scene' class, or it was not unstripped.");
+            }
+            sceneField_Handle = AccessTools.Field(sceneType, "m_Handle");
+            if (sceneField_Handle == null)
+            {
+                throw new Exception("This version of Unity does not ship with the 'Scene.m_Handle' field, or it was not unstripped.");
+            }
+
+            Type handleType = sceneField_Handle.FieldType;
+            UseNewSceneHandle = handleType.FullName == "UnityEngine.SceneManagement.SceneHandle";
+            if (!UseNewSceneHandle) return;
+
+            sceneHandleToInt = AccessTools.GetDeclaredMethods(handleType)
+                    .FirstOrDefault(m =>
+                        m.Name == "op_Implicit" &&
+                        m.ReturnType == typeof(int) &&
+                        m.GetParameters().FirstOrDefault()?.ParameterType == handleType
+                    );
+            intToSceneHandle = AccessTools.Method(handleType, "op_Implicit", new Type[] { typeof(int) });
+
+
+            if (sceneHandleToInt == null || intToSceneHandle == null)
+            {
+                throw new Exception("This version of Unity does not ship with the 'SceneHandle' implicit conversion operators, or they were not unstripped.");
+            }
+            getSceneName = AccessTools.Method(sceneType, "GetNameInternal", new Type[] { handleType });
+            if (getSceneName == null)
+            {
+                throw new Exception("This version of Unity does not ship with the 'GetNameInternal' method, or it was not unstripped.");
+            }
+        }
+        
         protected internal abstract void OnInitialize();
 
         /// <summary>
@@ -99,14 +146,32 @@ namespace UniverseLib
         /// </summary>
         public static int GetSceneIntHandle(Scene scene)
             => Instance.Internal_GetSceneIntHandle(scene);
-        protected internal abstract int Internal_GetSceneIntHandle(Scene scene);
+        protected internal int Internal_GetSceneIntHandle(Scene scene)
+        {
+            object? handle = sceneField_Handle.GetValue(scene);
+            if (UseNewSceneHandle)
+            {
+                return (int)sceneHandleToInt.Invoke(null, new object[] { handle });
+            }
+            return (int)handle;
+        }
 
         /// <summary>
         /// Helper to create a <see cref="Scene"/> from an int handle.
         /// </summary>
         public static Scene CreateSceneFromIntHandle(int sceneHandle)
             => Instance.Internal_CreateSceneFromIntHandle(sceneHandle);
-        protected internal abstract Scene Internal_CreateSceneFromIntHandle(int sceneHandle);
+        protected internal Scene Internal_CreateSceneFromIntHandle(int sceneHandle)
+        {
+            Scene scene = new Scene();
+            object handele = sceneHandle;
+            if (UseNewSceneHandle)
+            {
+                handele = intToSceneHandle.Invoke(null, new object[] { sceneHandle });
+            }
+            sceneField_Handle.SetValue(scene, handele);
+            return scene;
+        }
 
         /// <summary>
         /// Helper to invoke Unity's <see cref="Scene.GetNameInternal"/> method.
@@ -115,7 +180,11 @@ namespace UniverseLib
         /// <returns></returns>
         public static string GetSceneNameByIntHandle(int sceneHandle)
             => Instance.Internal_GetSceneNameByIntHandle(sceneHandle);
-        protected internal abstract string Internal_GetSceneNameByIntHandle(int sceneHandle);
+        protected internal string Internal_GetSceneNameByIntHandle(int sceneHandle)
+        {
+            object handle = intToSceneHandle.Invoke(null, new object[] { sceneHandle });
+            return (string)getSceneName.Invoke(null, new object[] { handle });
+        }
 
         /// <summary>
         /// Helper to invoke Unity's <see cref="Scene.GetRootGameObjects"/> method.

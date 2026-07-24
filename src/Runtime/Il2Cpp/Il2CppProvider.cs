@@ -22,7 +22,7 @@ using UnhollowerBaseLib;
 
 namespace UniverseLib.Runtime.Il2Cpp
 {
-    internal class Il2CppProvider : RuntimeHelper
+    internal unsafe class Il2CppProvider : RuntimeHelper
     {
         readonly AmbiguousMemberHandler<ColorBlock, Color> normalColor = new(true, true, "normalColor", "m_NormalColor");
         readonly AmbiguousMemberHandler<ColorBlock, Color> highlightedColor = new(true, true, "highlightedColor", "m_HighlightedColor");
@@ -33,54 +33,14 @@ namespace UniverseLib.Runtime.Il2Cpp
 
         internal delegate IntPtr d_FindObjectsOfTypeAll(IntPtr type);
 
-        // SceneHandle 是简单结构体， 使用 int 传递与 SceneHandle 效果相同
-        internal delegate void d_GetRootGameObjects(int handle, IntPtr list);
+        // SceneHandle 是简单结构体，实际传递 int*指针
+        internal delegate void d_GetRootGameObjects(IntPtr handle, IntPtr list);
 
-        internal delegate int d_GetRootCountInternal(int handle);
-
-        internal bool UseNewSceneHandle { get; private set; }
-
-        internal FieldInfo? sceneField_Handle;
-        internal MethodInfo? sceneHandleToInt;
-        internal MethodInfo? intToSceneHandle;
-        internal MethodInfo? getSceneName;
+        internal delegate int d_GetRootCountInternal(IntPtr handle);
 
         protected internal override void OnInitialize()
         {
             new Il2CppTextureHelper();
-            Internal_SceneHandleInitialize();
-        }
-
-        protected internal void Internal_SceneHandleInitialize()
-        {
-            Type? sceneType = ReflectionUtility.GetTypeByName("UnityEngine.SceneManagement.Scene");
-            if (sceneType == null)
-            {
-                throw new Exception("This version of Unity does not ship with the 'Scene' class, or it was not unstripped.");
-            }
-            sceneField_Handle = AccessTools.Field(sceneType, "m_Handle");
-            if (sceneField_Handle == null)
-            {
-                throw new Exception("This version of Unity does not ship with the 'Scene.m_Handle' field, or it was not unstripped.");
-            }
-
-            Type handleType = sceneField_Handle.FieldType;
-            UseNewSceneHandle = handleType.FullName == "UnityEngine.SceneManagement.SceneHandle";
-            if (!UseNewSceneHandle) return;
-
-            sceneHandleToInt = AccessTools.GetDeclaredMethods(sceneType)
-                    .FirstOrDefault(m =>
-                        m.Name == "op_Implicit" &&
-                        m.ReturnType == typeof(int) &&
-                        m.GetParameters().FirstOrDefault()?.ParameterType == handleType
-                    );
-            intToSceneHandle = AccessTools.Method(sceneType, "op_Implicit", new Type[] { typeof(int) });
-            getSceneName = AccessTools.Method(sceneType, "GetNameInternal", new Type[] { handleType });
-
-            if (sceneHandleToInt == null || intToSceneHandle == null || getSceneName == null)
-            {
-                throw new Exception("This version of Unity does not ship with the 'SceneHandle' implicit conversion operators, or they were not unstripped.");
-            }
         }
         
         /// <inheritdoc/>
@@ -138,64 +98,39 @@ namespace UniverseLib.Runtime.Il2Cpp
                         "UnityEngine.ResourcesAPIInternal::FindObjectsOfTypeAll") // Unity 2020+ updated to this
                     .Invoke(Il2CppType.From(typeof(T)).Pointer));
         }
-        protected internal override int Internal_GetSceneIntHandle(Scene scene)
-        {
-            object? handle = sceneField_Handle.GetValue(scene);
-            if (UseNewSceneHandle)
-            {
-                return (int)sceneHandleToInt.Invoke(null, new object[] { handle });
-            }
-            return (int)handle;
-        }
-
-        protected internal override Scene Internal_CreateSceneFromIntHandle(int sceneHandle)
-        {
-            Scene scene = new Scene();
-            object handele = sceneHandle;
-            if (UseNewSceneHandle)
-            {
-                handele = intToSceneHandle.Invoke(null, new object[] { sceneHandle });
-            }
-            sceneField_Handle.SetValue(scene, handele);
-            return scene;
-        }
-
-        protected internal override string Internal_GetSceneNameByIntHandle(int sceneHandle)
-        {
-            object handle = intToSceneHandle.Invoke(null, new object[] { sceneHandle });
-            return (string)getSceneName.Invoke(null, new object[] { handle });
-        }
 
         /// <inheritdoc/>
         protected internal override GameObject[] Internal_GetRootGameObjects(Scene scene)
         {
-            if (!scene.isLoaded || RuntimeHelper.GetSceneIntHandle(scene) == -1)
+            if (!scene.isLoaded || GetSceneIntHandle(scene) == -1)
             {
                 return [];
             }
-            int count = GetRootCount(RuntimeHelper.GetSceneIntHandle(scene));
+            
+            int count = Internal_GetRootCount(scene);
             if (count < 1)
             {
                 return [];
             }
 
+            int handle = GetSceneIntHandle(scene);
+            IntPtr ptr = UseNewSceneHandle ? (IntPtr)(&handle) : (IntPtr)handle;
+
             Il2CppSystem.Collections.Generic.List<GameObject> list = new(count);
             ICallManager.GetICall<d_GetRootGameObjects>("UnityEngine.SceneManagement.Scene::GetRootGameObjectsInternal")
-                .Invoke(RuntimeHelper.GetSceneIntHandle(scene), list.Pointer);
+                .Invoke(ptr , list.Pointer);
             return list.ToArray();
         }
 
         /// <inheritdoc/>
-        protected internal override int Internal_GetRootCount(Scene scene) => GetRootCount(RuntimeHelper.GetSceneIntHandle(scene));
-
-        /// <summary>
-        /// Gets the <see cref="Scene.rootCount"/> for the provided scene handle.
-        /// </summary>
-        protected internal static int GetRootCount(int sceneHandle)
+        protected internal override int Internal_GetRootCount(Scene scene)
         {
+            int handle = GetSceneIntHandle(scene);
+            IntPtr ptr = UseNewSceneHandle ? (IntPtr)(&handle) : (IntPtr)handle;
             return ICallManager.GetICall<d_GetRootCountInternal>("UnityEngine.SceneManagement.Scene::GetRootCountInternal")
-                   .Invoke(sceneHandle);
+                   .Invoke(ptr);
         }
+
 
         /// <inheritdoc/>
         protected internal override void Internal_SetColorBlock(Selectable selectable, ColorBlock colorBlock)
