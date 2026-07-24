@@ -33,15 +33,53 @@ namespace UniverseLib.Runtime.Il2Cpp
 
         internal delegate IntPtr d_FindObjectsOfTypeAll(IntPtr type);
 
+        // SceneHandle 是简单结构体， 使用 int 传递与 SceneHandle 效果相同
         internal delegate void d_GetRootGameObjects(int handle, IntPtr list);
 
         internal delegate int d_GetRootCountInternal(int handle);
 
+        internal bool UseNewSceneHandle { get; private set; }
+
+        internal FieldInfo? sceneField_Handle;
+        internal MethodInfo? sceneHandleToInt;
+        internal MethodInfo? intToSceneHandle;
+
         protected internal override void OnInitialize()
         {
             new Il2CppTextureHelper();
+            Internal_SceneHandleInitialize();
         }
 
+        protected internal void Internal_SceneHandleInitialize()
+        {
+            Type? sceneType = ReflectionUtility.GetTypeByName("UnityEngine.SceneManagement.Scene");
+            if (sceneType == null)
+            {
+                throw new Exception("This version of Unity does not ship with the 'Scene' class, or it was not unstripped.");
+            }
+            sceneField_Handle = AccessTools.Field(sceneType, "m_Handle");
+            if (sceneField_Handle == null)
+            {
+                throw new Exception("This version of Unity does not ship with the 'Scene.m_Handle' field, or it was not unstripped.");
+            }
+
+            Type handleType = sceneField_Handle.FieldType;
+            UseNewSceneHandle = handleType.FullName == "UnityEngine.SceneManagement.SceneHandle";
+            if (!UseNewSceneHandle) return;
+
+            sceneHandleToInt = AccessTools.GetDeclaredMethods(sceneType)
+                    .FirstOrDefault(m =>
+                        m.Name == "op_Implicit" &&
+                        m.ReturnType == typeof(int) &&
+                        m.GetParameters().FirstOrDefault()?.ParameterType == handleType
+                    );
+            MethodInfo? IntToSceneHandle = AccessTools.Method(sceneType, "op_Implicit", new Type[] { typeof(int) });
+            if (sceneHandleToInt == null || IntToSceneHandle == null)
+            {
+                throw new Exception("This version of Unity does not ship with the 'SceneHandle' implicit conversion operators, or they were not unstripped.");
+            }
+        }
+        
         /// <inheritdoc/>
         protected internal override Coroutine Internal_StartCoroutine(IEnumerator routine)
             => UniversalBehaviour.Instance.StartCoroutine(routine.WrapToIl2Cpp());
@@ -97,16 +135,35 @@ namespace UniverseLib.Runtime.Il2Cpp
                         "UnityEngine.ResourcesAPIInternal::FindObjectsOfTypeAll") // Unity 2020+ updated to this
                     .Invoke(Il2CppType.From(typeof(T)).Pointer));
         }
+        protected internal override int Internal_GetSceneIntHandle(Scene scene)
+        {
+            object? handle = sceneField_Handle.GetValue(scene);
+            if (UseNewSceneHandle)
+            {
+                return (int)sceneHandleToInt.Invoke(null, new object[] { handle });
+            }
+            return (int)handle;
+        }
 
+        protected internal override Scene Internal_CreateSceneFromIntHandle(int sceneHandle)
+        {
+            Scene scene = new Scene();
+            object handele = sceneHandle;
+            if (UseNewSceneHandle)
+            {
+                handele = intToSceneHandle.Invoke(null, new object[] { sceneHandle });
+            }
+            sceneField_Handle.SetValue(scene, handele);
+            return scene;
+        }
         /// <inheritdoc/>
         protected internal override GameObject[] Internal_GetRootGameObjects(Scene scene)
         {
-            if (!scene.isLoaded || scene.handle == -1)
+            if (!scene.isLoaded || RuntimeHelper.GetSceneIntHandle(scene) == -1)
             {
                 return [];
             }
-
-            int count = GetRootCount(scene.handle);
+            int count = GetRootCount(RuntimeHelper.GetSceneIntHandle(scene));
             if (count < 1)
             {
                 return [];
@@ -114,12 +171,12 @@ namespace UniverseLib.Runtime.Il2Cpp
 
             Il2CppSystem.Collections.Generic.List<GameObject> list = new(count);
             ICallManager.GetICall<d_GetRootGameObjects>("UnityEngine.SceneManagement.Scene::GetRootGameObjectsInternal")
-                .Invoke(scene.handle, list.Pointer);
+                .Invoke(RuntimeHelper.GetSceneIntHandle(scene), list.Pointer);
             return list.ToArray();
         }
 
         /// <inheritdoc/>
-        protected internal override int Internal_GetRootCount(Scene scene) => GetRootCount(scene.handle);
+        protected internal override int Internal_GetRootCount(Scene scene) => GetRootCount(RuntimeHelper.GetSceneIntHandle(scene));
 
         /// <summary>
         /// Gets the <see cref="Scene.rootCount"/> for the provided scene handle.

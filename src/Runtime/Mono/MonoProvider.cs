@@ -17,9 +17,45 @@ namespace UniverseLib.Runtime.Mono
 {
     internal class MonoProvider : RuntimeHelper
     {
+        internal bool UseNewSceneHandle { get; private set; }
+
+        internal FieldInfo? sceneField_Handle;
+        internal MethodInfo? sceneHandleToInt;
+        internal MethodInfo? intToSceneHandle;
+
         protected internal override void OnInitialize()
         {
             new MonoTextureHelper();
+        }
+
+        protected internal void Internal_SceneHandleInitialize()
+        {
+            Type? sceneType = ReflectionUtility.GetTypeByName("UnityEngine.SceneManagement.Scene");
+            if (sceneType == null)
+            {
+                throw new Exception("This version of Unity does not ship with the 'Scene' class, or it was not unstripped.");
+            }
+            sceneField_Handle = AccessTools.Field(sceneType, "m_Handle");
+            if (sceneField_Handle == null)
+            {
+                throw new Exception("This version of Unity does not ship with the 'Scene.m_Handle' field, or it was not unstripped.");
+            }
+
+            Type handleType = sceneField_Handle.FieldType;
+            UseNewSceneHandle = handleType.FullName == "UnityEngine.SceneManagement.SceneHandle";
+            if (!UseNewSceneHandle) return;
+
+            sceneHandleToInt = AccessTools.GetDeclaredMethods(sceneType)
+                    .FirstOrDefault(m =>
+                        m.Name == "op_Implicit" &&
+                        m.ReturnType == typeof(int) &&
+                        m.GetParameters().FirstOrDefault()?.ParameterType == handleType
+                    );
+            MethodInfo? IntToSceneHandle = AccessTools.Method(sceneType, "op_Implicit", new Type[] { typeof(int) });
+            if (sceneHandleToInt == null || IntToSceneHandle == null)
+            {
+                throw new Exception("This version of Unity does not ship with the 'SceneHandle' implicit conversion operators, or they were not unstripped.");
+            }
         }
 
         /// <inheritdoc/>
@@ -52,6 +88,28 @@ namespace UniverseLib.Runtime.Mono
 
         protected internal override T[] Internal_FindObjectsOfTypeAll<T>()
             => Resources.FindObjectsOfTypeAll<T>();
+
+        protected internal override int Internal_GetSceneIntHandle(Scene scene)
+        {
+            object? handle = sceneField_Handle.GetValue(scene);
+            if (UseNewSceneHandle)
+            {
+                return (int)sceneHandleToInt.Invoke(null, new object[] { handle });
+            }
+            return (int)handle;
+        }
+
+        protected internal override Scene Internal_CreateSceneFromIntHandle(int sceneHandle)
+        {
+            Scene scene = new Scene();
+            object handele = sceneHandle;
+            if (UseNewSceneHandle)
+            {
+                handele = intToSceneHandle.Invoke(null, new object[] { sceneHandle });
+            }
+            sceneField_Handle.SetValue(scene, handele);
+            return scene;
+        }
 
         /// <inheritdoc/>
         protected internal override GameObject[] Internal_GetRootGameObjects(Scene scene) 

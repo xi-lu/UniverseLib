@@ -95,6 +95,21 @@ namespace UniverseLib
         protected internal abstract void Internal_GraphicRaycast(GraphicRaycaster raycaster, PointerEventData data, List<RaycastResult> list);
 
         /// <summary>
+        /// Helper to get the value of Unity's <see cref="Scene.handle"/> property.
+        /// </summary>
+        public static int GetSceneIntHandle(Scene scene)
+            => Instance.Internal_GetSceneIntHandle(scene);
+        protected internal abstract int Internal_GetSceneIntHandle(Scene scene);
+
+        /// <summary>
+        /// Helper to create a <see cref="Scene"/> from an int handle.
+        /// </summary>
+        public static Scene CreateSceneFromIntHandle(int sceneHandle)
+            => Instance.Internal_CreateSceneFromIntHandle(sceneHandle);
+        protected internal abstract Scene Internal_CreateSceneFromIntHandle(int sceneHandle);
+  
+
+        /// <summary>
         /// Helper to invoke Unity's <see cref="Scene.GetRootGameObjects"/> method.
         /// </summary>
         public static GameObject[] GetRootGameObjects(Scene scene)
