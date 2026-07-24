@@ -107,7 +107,15 @@ namespace UniverseLib
         public static Scene CreateSceneFromIntHandle(int sceneHandle)
             => Instance.Internal_CreateSceneFromIntHandle(sceneHandle);
         protected internal abstract Scene Internal_CreateSceneFromIntHandle(int sceneHandle);
-  
+
+        /// <summary>
+        /// Helper to invoke Unity's <see cref="Scene.GetNameInternal"/> method.
+        /// </summary>
+        /// <param name="sceneHandle"></param>
+        /// <returns></returns>
+        public static string GetSceneNameByIntHandle(int sceneHandle)
+            => Instance.Internal_GetSceneNameByIntHandle(sceneHandle);
+        protected internal abstract string Internal_GetSceneNameByIntHandle(int sceneHandle);
 
         /// <summary>
         /// Helper to invoke Unity's <see cref="Scene.GetRootGameObjects"/> method.

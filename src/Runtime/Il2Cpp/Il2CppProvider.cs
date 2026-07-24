@@ -43,6 +43,7 @@ namespace UniverseLib.Runtime.Il2Cpp
         internal FieldInfo? sceneField_Handle;
         internal MethodInfo? sceneHandleToInt;
         internal MethodInfo? intToSceneHandle;
+        internal MethodInfo? getSceneName;
 
         protected internal override void OnInitialize()
         {
@@ -73,8 +74,10 @@ namespace UniverseLib.Runtime.Il2Cpp
                         m.ReturnType == typeof(int) &&
                         m.GetParameters().FirstOrDefault()?.ParameterType == handleType
                     );
-            MethodInfo? IntToSceneHandle = AccessTools.Method(sceneType, "op_Implicit", new Type[] { typeof(int) });
-            if (sceneHandleToInt == null || IntToSceneHandle == null)
+            intToSceneHandle = AccessTools.Method(sceneType, "op_Implicit", new Type[] { typeof(int) });
+            getSceneName = AccessTools.Method(sceneType, "GetNameInternal", new Type[] { handleType });
+
+            if (sceneHandleToInt == null || intToSceneHandle == null || getSceneName == null)
             {
                 throw new Exception("This version of Unity does not ship with the 'SceneHandle' implicit conversion operators, or they were not unstripped.");
             }
@@ -156,6 +159,13 @@ namespace UniverseLib.Runtime.Il2Cpp
             sceneField_Handle.SetValue(scene, handele);
             return scene;
         }
+
+        protected internal override string Internal_GetSceneNameByIntHandle(int sceneHandle)
+        {
+            object handle = intToSceneHandle.Invoke(null, new object[] { sceneHandle });
+            return (string)getSceneName.Invoke(null, new object[] { handle });
+        }
+
         /// <inheritdoc/>
         protected internal override GameObject[] Internal_GetRootGameObjects(Scene scene)
         {
