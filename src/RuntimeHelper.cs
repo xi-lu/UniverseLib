@@ -74,7 +74,6 @@ namespace UniverseLib
             {
                 throw new Exception("This version of Unity does not ship with the 'SceneHandle' implicit conversion operators, or they were not unstripped.");
             }
-            
         }
         
         protected internal abstract void OnInitialize();
@@ -190,7 +189,6 @@ namespace UniverseLib
                 handle = intToSceneHandle.Invoke(null, new object[] { sceneHandle });  
             }
             return (string)getSceneName.Invoke(null, new object[] { handle });
-            
         }
 
         /// <summary>
