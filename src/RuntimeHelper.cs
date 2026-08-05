@@ -52,6 +52,13 @@ namespace UniverseLib
 
             Type handleType = sceneField_Handle.FieldType;
             UseNewSceneHandle = handleType.FullName == "UnityEngine.SceneManagement.SceneHandle";
+
+            getSceneName = AccessTools.Method(sceneType, "GetNameInternal", new Type[] { handleType });
+            if (getSceneName == null)
+            {
+                throw new Exception("This version of Unity does not ship with the 'GetNameInternal' method, or it was not unstripped.");
+            }
+
             if (!UseNewSceneHandle) return;
 
             sceneHandleToInt = AccessTools.GetDeclaredMethods(handleType)
@@ -67,11 +74,7 @@ namespace UniverseLib
             {
                 throw new Exception("This version of Unity does not ship with the 'SceneHandle' implicit conversion operators, or they were not unstripped.");
             }
-            getSceneName = AccessTools.Method(sceneType, "GetNameInternal", new Type[] { handleType });
-            if (getSceneName == null)
-            {
-                throw new Exception("This version of Unity does not ship with the 'GetNameInternal' method, or it was not unstripped.");
-            }
+            
         }
         
         protected internal abstract void OnInitialize();
@@ -164,12 +167,12 @@ namespace UniverseLib
         protected internal Scene Internal_CreateSceneFromIntHandle(int sceneHandle)
         {
             Scene scene = new Scene();
-            object handele = sceneHandle;
+            object handle = sceneHandle;
             if (UseNewSceneHandle)
             {
-                handele = intToSceneHandle.Invoke(null, new object[] { sceneHandle });
+                handle = intToSceneHandle.Invoke(null, new object[] { sceneHandle });
             }
-            sceneField_Handle.SetValue(scene, handele);
+            sceneField_Handle.SetValue(scene, handle);
             return scene;
         }
 
@@ -182,8 +185,12 @@ namespace UniverseLib
             => Instance.Internal_GetSceneNameByIntHandle(sceneHandle);
         protected internal string Internal_GetSceneNameByIntHandle(int sceneHandle)
         {
-            object handle = intToSceneHandle.Invoke(null, new object[] { sceneHandle });
+            object handle = sceneHandle;
+            if (UseNewSceneHandle){
+                handle = intToSceneHandle.Invoke(null, new object[] { sceneHandle });  
+            }
             return (string)getSceneName.Invoke(null, new object[] { handle });
+            
         }
 
         /// <summary>
