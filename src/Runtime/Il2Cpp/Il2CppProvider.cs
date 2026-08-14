@@ -29,14 +29,14 @@ namespace UniverseLib.Runtime.Il2Cpp
         readonly AmbiguousMemberHandler<ColorBlock, Color> pressedColor = new(true, true, "pressedColor", "m_PressedColor");
         readonly AmbiguousMemberHandler<ColorBlock, Color> disabledColor = new(true, true, "disabledColor", "m_DisabledColor");
 
-        internal delegate IntPtr d_LayerToName(int layer);
-
         internal delegate IntPtr d_FindObjectsOfTypeAll(IntPtr type);
 
         // SceneHandle 是简单结构体，实际传递 int*指针
         internal delegate void d_GetRootGameObjects(IntPtr handle, IntPtr list);
 
         internal delegate int d_GetRootCountInternal(IntPtr handle);
+
+        internal MethodInfo m_LayerToName;
 
         protected internal override void OnInitialize()
         {
@@ -75,8 +75,20 @@ namespace UniverseLib.Runtime.Il2Cpp
         /// <inheritdoc/>
         protected internal override string Internal_LayerToName(int layer)
         {
-            d_LayerToName iCall = ICallManager.GetICall<d_LayerToName>("UnityEngine.LayerMask::LayerToName");
-            return IL2CPP.Il2CppStringToManaged(iCall.Invoke(layer));
+            if (m_LayerToName == null)
+            {
+                Type type = ReflectionUtility.GetTypeByName("UnityEngine.LayerMask");
+                m_LayerToName = type.GetMethod("LayerToName", 
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public,
+                    null,
+                    new Type[] { typeof(int) },
+                    null);
+                if (m_LayerToName == null)
+                {
+                    throw new Exception("Failed to find LayerToName method in UnityEngine.LayerMask");
+                }
+            }
+            return (string)m_LayerToName.Invoke(null, new object[] { layer });
         }
 
         /// <inheritdoc/>
