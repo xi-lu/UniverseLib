@@ -39,7 +39,10 @@ namespace UniverseLib
 
         protected internal void Internal_SceneHandleInitialize()
         {
-            Type? sceneType = ReflectionUtility.GetTypeByName("UnityEngine.SceneManagement.Scene");
+            // Type? sceneType = ReflectionUtility.GetTypeByName("UnityEngine.SceneManagement.Scene");
+            // In some cases, the Type obtained by ReflectionUtility.GetTypeByName is different from typeof(Scene).
+            // ReflectionUtility.GetTypeByName().Assembly.Location -> Managed\ .dll
+            Type sceneType = typeof(Scene);
             if (sceneType == null)
             {
                 throw new Exception("This version of Unity does not ship with the 'Scene' class, or it was not unstripped.");
@@ -171,7 +174,10 @@ namespace UniverseLib
             {
                 handle = intToSceneHandle.Invoke(null, new object[] { sceneHandle });
             }
-            sceneField_Handle.SetValue(scene, handle);
+            // Since Scene is a struct, modifying field values via reflection requires a boxing operation.
+            object s = scene;
+            sceneField_Handle.SetValue(s, handle);
+            scene = (Scene)s;
             return scene;
         }
 
