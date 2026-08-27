@@ -119,28 +119,21 @@ namespace UniverseLib.Runtime.Il2Cpp
                 return [];
             }
             
-            int count = Internal_GetRootCount(scene);
+            int count = scene.rootCount;
             if (count < 1)
             {
                 return [];
             }
 
-            int handle = GetSceneIntHandle(scene);
-            IntPtr ptr = UseNewSceneHandle ? (IntPtr)(&handle) : (IntPtr)handle;
-
-            Il2CppSystem.Collections.Generic.List<GameObject> list = new(count);
-            ICallManager.GetICall<d_GetRootGameObjects>("UnityEngine.SceneManagement.Scene::GetRootGameObjectsInternal")
-                .Invoke(ptr , list.Pointer);
+            Il2CppSystem.Collections.Generic.List<GameObject> list = new Il2CppSystem.Collections.Generic.List<GameObject>(count);
+            scene.GetRootGameObjects(list);
             return list.ToArray();
         }
 
         /// <inheritdoc/>
         protected internal override int Internal_GetRootCount(Scene scene)
         {
-            int handle = GetSceneIntHandle(scene);
-            IntPtr ptr = UseNewSceneHandle ? (IntPtr)(&handle) : (IntPtr)handle;
-            return ICallManager.GetICall<d_GetRootCountInternal>("UnityEngine.SceneManagement.Scene::GetRootCountInternal")
-                   .Invoke(ptr);
+            return scene.rootCount;
         }
 
 
